@@ -50,4 +50,5 @@ class Wuhan_roadsView(MethodView):
             return fail(msg='id not found',http=404)
         return ok(Wuhan_roads)
 
-Wuhan_roads_bp.add_url_rule("/", view_func=Wuhan_roadsView.as_view("Wuhan_roads"))
+Wuhan_roads_bp.add_url_rule("/", view_func=Wuhan_roadsView.as_view("Wuhan_roads_list"))
+Wuhan_roads_bp.add_url_rule("/<int:id>", view_func=Wuhan_roadsView.as_view("Wuhan_roads_detail"))

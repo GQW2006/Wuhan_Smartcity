@@ -1,4 +1,3 @@
-from app.blueprints import Wuhan_Buildings
 from flask import Blueprint,request
 from flask.views import MethodView
 
@@ -51,4 +50,5 @@ class Wuhan_eventsView(MethodView):
             return fail(msg='id not found',http=404)
         return ok(Wuhan_events)
 
-Wuhan_events_bp.add_url_rule("/", view_func=Wuhan_eventsView.as_view("Wuhan_events"))
+Wuhan_events_bp.add_url_rule("/", view_func=Wuhan_eventsView.as_view("Wuhan_events_list"))
+Wuhan_events_bp.add_url_rule("/<int:id>", view_func=Wuhan_eventsView.as_view("Wuhan_events_detail"))

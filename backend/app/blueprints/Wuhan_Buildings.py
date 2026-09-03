@@ -18,36 +18,41 @@ with open(os.path.join(BasePath,"data","Wuhan_Buildings.json"),encoding='utf-8')
 class Wuhan_BuildinsView(MethodView):
     def get(self,id=None):
         if id:
-            for layer in Wuhan_Buildings:
-                for feature in layer['features']:
-                    if feature['id'] == id:
+            for feature in Wuhan_Buildings['features']:
+                    if str(feature['id']) == str(id):
                         return ok(feature)
             return fail(msg='id not found',http=404)
         return ok(Wuhan_Buildings)
         
     def post(self):
-        data = request.json
-        if not data:
-            return fail(msg='data is empty',http=400)
+        data = request.get_json(silent=True) or {}
+        coordinates = (data.get('geometry' or {}).get('coordinates'))
+        if not coordinates:
+            return fail(msg='coordinates is empty',http=400)
+        features = Wuhan_Buildings['features']
+        # 取出类型伟int的id，过滤掉非int的id
+        ids = [int(feature['id']) for feature in features if isinstance(feature.get('id'),int)]
+        new_id = str(max(ids)+1) if ids else str(len(features)+1)
         feature = {
             "type":"Feature",
             "geometry":{
                 "type":"Point",
-                "coordinates":data['geometry']['coordinates']
+                "coordinates":coordinates
             },
-            "properties":data['properties'],
-            "id":str(len(Wuhan_Buildings[0]['features'])+1)
+            "properties":data.get('properties',{}),
+            "id":new_id
         }
-        Wuhan_Buildings[0]['features'].append(feature)
-        return ok(Wuhan_Buildings)
+        features.append(feature)
+        return ok(feature)
     def delete(self,id=None):
-        if id:
-            for layer in Wuhan_Buildings:
-                for feature in layer['features']:
-                    if feature['id'] == id:
-                        layer['features'].remove(feature)
-                        return ok(Wuhan_Buildings)
-            return fail(msg='id not found',http=404)
-        return ok(Wuhan_Buildings)
+        features = Wuhan_Buildings['features']
+        for i,feature in enumerate(features):
+            if str(feature.get('id')) == str(id):
+                    del features[i]
+                    return ok(feature)
+        return fail(msg='id not found',http=404)
 
-Wuhan_Buildings_bp.add_url_rule("/", view_func=Wuhan_BuildinsView.as_view("Wuhan_Buildings"))
+
+Wuhan_Buildings_bp.add_url_rule("/", view_func=Wuhan_BuildinsView.as_view("Wuhan_Buildings_list"))
+Wuhan_Buildings_bp.add_url_rule("/<int:id>", view_func=Wuhan_BuildinsView.as_view("Wuhan_Buildings_detail"))
+
