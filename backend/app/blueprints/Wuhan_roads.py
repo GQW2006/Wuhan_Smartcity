@@ -1,54 +1,53 @@
-from flask import Blueprint,request
+from flask_smorest import Blueprint
 from flask.views import MethodView
+from sqlalchemy import func
 
-from utils.respones import ok,fail
+from shapely.geometry import shape
+from geoalchemy2.shape import from_shape
 
-Wuhan_roads_bp = Blueprint('Wuhan_roads', __name__, url_prefix='/Wuhan_roads')
+from extensions import db
+from ..model import Wuhan_roads
+from schemas import Wuhan_roadsOutSchema, Wuhan_roadsInSchema, Wuhan_roadsQuerySchema
+from utils.respones import ok, fail, ok_geojson
 
+Wuhan_roads_bp = Blueprint('Wuhan_roads', __name__, url_prefix='/api/Wuhan_roads')
 
-import json
-import os
-
-BasePath = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-with open(os.path.join(BasePath,"data","Wuhan_roads.json"),encoding='utf-8') as f:
-    data = json.load(f)
-    Wuhan_roads = data
 
 class Wuhan_roadsView(MethodView):
-    def get(self,id=None):
-          if id:
-            for layer in Wuhan_roads:
-                for feature in layer['features']:
-                    if feature['id'] == id:
-                        return ok(feature)
-            return fail(msg='id not found',http=404)
-          return ok(Wuhan_roads)
-        
-    def post(self):
-        data = request.json
-        if not data:
-            return fail(msg='data is empty',http=400)
-        feature = {
-            "type":"Feature",
-            "geometry":{
-                "type":"Point",
-                "coordinates":data['geometry']['coordinates']
-            },
-            "properties":data['properties'],
-            "id":str(len(Wuhan_roads[0]['features'])+1)
-        }
-        Wuhan_roads[0]['features'].append(feature)
-        return ok(Wuhan_roads)
-    def delete(self,id=None):
-        if id:
-            for layer in Wuhan_roads:
-                for feature in layer['features']:
-                    if feature['id'] == id:
-                        layer['features'].remove(feature)
-                        return ok(Wuhan_roads)
-            return fail(msg='id not found',http=404)
-        return ok(Wuhan_roads)
+    @Wuhan_roads_bp.arguments(Wuhan_roadsQuerySchema, location="query")
+    def get(self, args, id=None):
+        query = Wuhan_roads.query
+        if id is not None:
+            query = query.filter(Wuhan_roads.id == id)
+        if args.get('type') is not None:
+            query = query.filter(Wuhan_roads.type == args['type'])
+        if args.get('name') is not None:
+            query = query.filter(Wuhan_roads.name == args['name'])
+        return ok_geojson(query.all(), Wuhan_roadsOutSchema)
+
+    @Wuhan_roads_bp.arguments(Wuhan_roadsInSchema, location="json")
+    def post(self, data):
+        geom = from_shape(shape(data['geom']), srid=4326)
+        max_id = db.session.query(func.max(Wuhan_roads.id)).scalar() or 0
+        record = Wuhan_roads(
+            id=max_id + 1,
+            name=data['name'],
+            osm_id=data['osm_id'],
+            type=data['type'],
+            geom=geom,
+        )
+        db.session.add(record)
+        db.session.commit()
+        return ok(Wuhan_roadsOutSchema().dump(record))
+
+    def delete(self, id):
+        record = Wuhan_roads.query.get(id)
+        if not record:
+            return fail(msg='id not found', http=404)
+        db.session.delete(record)
+        db.session.commit()
+        return ok({'deleted': id})
+
 
 Wuhan_roads_bp.add_url_rule("/", view_func=Wuhan_roadsView.as_view("Wuhan_roads_list"))
 Wuhan_roads_bp.add_url_rule("/<int:id>", view_func=Wuhan_roadsView.as_view("Wuhan_roads_detail"))

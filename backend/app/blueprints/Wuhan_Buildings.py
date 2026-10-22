@@ -1,58 +1,44 @@
-from flask import Blueprint,request
+from flask_smorest import Blueprint
 from flask.views import MethodView
+from sqlalchemy import func
+from shapely.geometry import shape
+from geoalchemy2.shape import from_shape
 
-from utils.respones import ok,fail
+from extensions import db
+from ..model import Wuhan_Buildings
+from schemas import Wuhan_BuildingsOutSchema, Wuhan_BuildingsQuerySchema, Wuhan_BuildingsInSchema
+from utils.respones import ok, fail, ok_geojson
 
-Wuhan_Buildings_bp = Blueprint('Wuhan_Buildings', __name__, url_prefix='/Wuhan_Buildings')
-
-
-import json
-import os
-
-BasePath = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-with open(os.path.join(BasePath,"data","Wuhan_Buildings.json"),encoding='utf-8') as f:
-    data = json.load(f)
-    Wuhan_Buildings = data
-
-class Wuhan_BuildinsView(MethodView):
-    def get(self,id=None):
-        if id:
-            for feature in Wuhan_Buildings['features']:
-                    if str(feature['id']) == str(id):
-                        return ok(feature)
-            return fail(msg='id not found',http=404)
-        return ok(Wuhan_Buildings)
-        
-    def post(self):
-        data = request.get_json(silent=True) or {}
-        coordinates = (data.get('geometry' or {}).get('coordinates'))
-        if not coordinates:
-            return fail(msg='coordinates is empty',http=400)
-        features = Wuhan_Buildings['features']
-        # 取出类型伟int的id，过滤掉非int的id
-        ids = [int(feature['id']) for feature in features if isinstance(feature.get('id'),int)]
-        new_id = str(max(ids)+1) if ids else str(len(features)+1)
-        feature = {
-            "type":"Feature",
-            "geometry":{
-                "type":"Point",
-                "coordinates":coordinates
-            },
-            "properties":data.get('properties',{}),
-            "id":new_id
-        }
-        features.append(feature)
-        return ok(feature)
-    def delete(self,id=None):
-        features = Wuhan_Buildings['features']
-        for i,feature in enumerate(features):
-            if str(feature.get('id')) == str(id):
-                    del features[i]
-                    return ok(feature)
-        return fail(msg='id not found',http=404)
+Wuhan_Buildings_bp = Blueprint('Wuhan_Buildings', __name__, url_prefix='/api/Wuhan_Buildings')
 
 
-Wuhan_Buildings_bp.add_url_rule("/", view_func=Wuhan_BuildinsView.as_view("Wuhan_Buildings_list"))
-Wuhan_Buildings_bp.add_url_rule("/<int:id>", view_func=Wuhan_BuildinsView.as_view("Wuhan_Buildings_detail"))
+class Wuhan_BuildingsView(MethodView):
+    @Wuhan_Buildings_bp.arguments(Wuhan_BuildingsQuerySchema, location="query")
+    def get(self, args, id=None):
+        query = Wuhan_Buildings.query
+        if id is not None:
+            query = query.filter(Wuhan_Buildings.id == id)
+        if args.get('Elevation') is not None:
+            query = query.filter(Wuhan_Buildings.Elevation == args['Elevation'])
+        return ok_geojson(query.all(), Wuhan_BuildingsOutSchema)
 
+    @Wuhan_Buildings_bp.arguments(Wuhan_BuildingsInSchema, location="json")
+    def post(self, data):
+        geom = from_shape(shape(data['geom']), srid=4326)
+        max_id = db.session.query(func.max(Wuhan_Buildings.id)).scalar() or 0
+        record = Wuhan_Buildings(id=max_id + 1, Elevation=data['Elevation'], geom=geom)
+        db.session.add(record)
+        db.session.commit()
+        return ok(Wuhan_BuildingsOutSchema().dump(record))
+
+    def delete(self, id):
+        record = Wuhan_Buildings.query.get(id)
+        if not record:
+            return fail(msg='id not found', http=404)
+        db.session.delete(record)
+        db.session.commit()
+        return ok({'deleted': id})
+
+
+Wuhan_Buildings_bp.add_url_rule("/", view_func=Wuhan_BuildingsView.as_view("Wuhan_Buildings_list"))
+Wuhan_Buildings_bp.add_url_rule("/<int:id>", view_func=Wuhan_BuildingsView.as_view("Wuhan_Buildings_detail"))

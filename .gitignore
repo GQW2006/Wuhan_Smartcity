@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境（backend/venv 自带 .gitignore，这里兜底防止误提交）
+venv/
+.venv/
+
+# 环境变量（含数据库凭据，禁止入库）
+.env
+
+# 日志
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# 系统
+.DS_Store
+Thumbs.db

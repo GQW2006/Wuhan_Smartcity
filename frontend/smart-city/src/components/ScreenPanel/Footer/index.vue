@@ -5,6 +5,7 @@
       <ChartsToggle v-model="show" />
       <ViewSwitch />
       <EventsQuery />
+      <BufferAnalysis />
       <MeasureTools />
     </div>
   </footer>
@@ -14,6 +15,7 @@ import RotationButton from "./RotationButton.vue";
 import ChartsToggle from "./ChartsToggle.vue";
 import ViewSwitch from "./ViewSwitch.vue";
 import EventsQuery from "./EventsQuery.vue";
+import BufferAnalysis from "./BufferAnalysis.vue";
 import MeasureTools from "./MeasureTools.vue";
 
 const show = defineModel();

@@ -6,7 +6,7 @@ import request from './request'
 // 获取城市建筑数据
 export const getCityBuildings = () => {
   return request({
-    url: '/Wuhan_Buildings/',
+    url: '/api/Wuhan_Buildings/',
     method: 'GET',
   })
 }
@@ -14,7 +14,7 @@ export const getCityBuildings = () => {
 // 获取道路数据
 export const getRoads = () => {
   return request({
-    url: '/Wuhan_roads/',
+    url: '/api/Wuhan_roads/',
     method: 'GET',
   })
 }
@@ -22,7 +22,16 @@ export const getRoads = () => {
 // 获取交通事件数据
 export const getEvents = () => {
   return request({
-    url: '/Wuhan_events/',
+    url: '/api/Wuhan_events/',
     method: 'GET',
+  })
+}
+
+// 获取事故点缓冲区分析结果（后端 ST_Buffer 计算，distance 为半径米）
+export const getEventBuffer = (id, distance = 1000) => {
+  return request({
+    url: `/api/Wuhan_events/${id}/buffer`,
+    method: 'GET',
+    params: { distance },
   })
 }
