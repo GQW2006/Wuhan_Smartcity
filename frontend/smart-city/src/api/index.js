@@ -35,3 +35,13 @@ export const getEventBuffer = (id, distance = 1000) => {
     params: { distance },
   })
 }
+
+// bbox 空间查询（后端 PostGIS ST_MakeEnvelope + ST_Intersects，返回 GeoJSON）
+export const getSpatialByBbox = ({ layer = 'events', bbox, limit = 1000 }) => {
+  const [minx, miny, maxx, maxy] = bbox
+  return request({
+    url: '/api/spatial/bbox',
+    method: 'GET',
+    params: { layer, minx, miny, maxx, maxy, limit },
+  })
+}

@@ -15,9 +15,10 @@
 - **大屏控制中心**
   - 出行人口统计（柱状图）、实时公交在线（玫瑰图）、人口统计（饼图）、三甲医院 / 高校统计卡片
   - 控制中心按钮可整体隐藏 / 展开左右图表列
-- **事故查询（框选）**
-  - 绘制矩形框，结合 Turf.js `booleanPointInPolygon` 判断事故点是否在框内
-  - 结果表格展示，点击行定位到对应事故点
+- **事故查询（框选 + 后端空间查询）**
+  - 地图上拖拽绘制矩形，前端将矩形转为 bbox 调用后端 `GET /api/spatial/bbox`
+  - 后端 PostGIS `ST_MakeEnvelope` + `ST_Intersects` 完成范围过滤，返回 GeoJSON
+  - 结果在地图上高亮（点→黄色圆点 / 线→青色线 / 面→半透明填充），并以表格展示，点击行定位到该事故点
 - **缓冲区分析（PostGIS）**
   - 后端 `ST_Buffer` 对目标事故点生成指定半径（米）缓冲区，`ST_DWithin` 判断圈内是否存在其他事故点
   - 前端 L7 `PolygonLayer` / `PointLayer` 渲染缓冲面与圈内高亮点
@@ -38,6 +39,7 @@
 | 地图 / 可视化 | Mapbox GL、AntV L7、AntV L7 Maps / Component / Draw |
 | 图表 | AntV G2 v5 |
 | 空间计算（前端） | Turf.js（@turf/turf） |
+| 空间查询（后端） | PostGIS（ST_MakeEnvelope / ST_Intersects / ST_Buffer / ST_DWithin） |
 | UI 组件 | Element Plus |
 | HTTP | Axios |
 | 后端框架 | Flask、flask-smorest、Flask-JWT-Extended |
@@ -57,12 +59,13 @@ Wuhan_Smartcity
 │   ├── extensions.py          # db / migrate / api / jwt 扩展实例
 │   ├── schemas.py             # flask-smorest 输入 / 输出序列化 Schema
 │   ├── services
-│   │   └── event_buffer.py    # 缓冲区分析服务（ST_Buffer / ST_DWithin）
+│   │   ├── event_buffer.py    # 缓冲区分析服务（ST_Buffer / ST_DWithin）
+│   │   └── spatial_query.py   # bbox 空间查询服务（ST_MakeEnvelope / ST_Intersects）
 │   ├── utils
 │   │   └── respones.py        # 统一响应封装（ok / fail / ok_geojson）
 │   ├── app
 │   │   ├── model              # ORM 模型（Wuhan_Buildings / Wuhan_roads / Wuhan_events）
-│   │   └── blueprints         # /api/Wuhan_* 蓝图 + 统一错误处理
+│   │   └── blueprints         # /api/Wuhan_* 与 /api/spatial 蓝图 + 统一错误处理
 │   ├── data                   # 原始 GeoJSON 数据（入库来源）
 │   ├── venv                   # 项目虚拟环境（不入库）
 │   └── .env                   # 数据库连接等敏感配置（不入库）
@@ -75,7 +78,7 @@ Wuhan_Smartcity
             ├── main.js        # 应用入口
             ├── App.vue        # 根组件
             ├── api            # Axios 请求封装与接口定义
-            ├── composables    # useSceneMap / useLayers / useEventBuffer
+            ├── composables    # useSceneMap / useLayers / useEventBuffer / useBoxQuery
             ├── assets         # 图标、图片、样式
             └── components
                 ├── MapContainer.vue   # Mapbox + L7 Scene 初始化（provide 共享场景）
@@ -179,6 +182,28 @@ npm run dev
 | DELETE | `/api/Wuhan_events/<id>` | 按 id 删除事件 |
 
 > 增删改操作实时写回 PostgreSQL；`buffer` 接口的 `distance` 为缓冲区半径（米，默认 1000，范围 1~50000）。
+
+### 空间查询（bbox）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/spatial/bbox` | 按矩形范围查询要素，返回 FeatureCollection |
+
+查询参数：
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `minx` / `miny` | 是 | 矩形左下角经纬度 |
+| `maxx` / `maxy` | 是 | 矩形右上角经纬度 |
+| `layer` | 否 | `events`（默认）/ `roads` / `buildings` |
+| `limit` | 否 | 返回条数上限，默认 1000，最大 5000 |
+
+```bash
+curl "http://127.0.0.1:5000/api/spatial/bbox?layer=events&minx=114.35&miny=30.45&maxx=114.45&maxy=30.55"
+```
+
+> 后端使用 `ST_MakeEnvelope(minx,miny,maxx,maxy,4326)` + `ST_Intersects` 在数据库侧过滤；
+> 需满足 `minx < maxx` 且 `miny < maxy`，否则返回 400。
 
 ## 🗂️ 数据说明
 

@@ -1,6 +1,10 @@
 <template>
   <div class="item">
-    <button class="toggle-btn" @click="toggleDraw">
+    <button
+      class="toggle-btn"
+      :class="{ active: isDrawing }"
+      @click="toggleDraw"
+    >
       <img class="btn-icon" src="@/assets/icons/pen-tool.svg" alt="事故查询" />
     </button>
     <p>事故查询</p>
@@ -9,100 +13,64 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useSceneMap } from '@/composables/useSceneMap'
-import { DrawRect, DrawEvent } from '@antv/l7-draw'
-import { point, polygon, booleanPointInPolygon } from '@turf/turf'
+import { useBoxQuery } from '@/composables/useBoxQuery'
 import DisplayCard from './DisplayCard.vue'
 
-import { getEvents } from '@/api'
-
 const sceneMap = useSceneMap()
+const { startBoxQuery, stopBoxQuery } = useBoxQuery()
 
 let map = null
 let scene = null
-let draw = null
-let eventsData = null
-const dataSource = ref([])
-const isShow = ref(false)
+const dataSource = ref([]) // 后端返回的要素
+const isShow = ref(false) // 结果表格显隐
+const isDrawing = ref(false) // 是否处于框选状态
 
-const toggleDraw = () => {
-  // 1. 切换到城市视角
-  map.flyTo({
-    center: [114.3, 30.5],
-    zoom: 12,
-    pitch: 30,
-  })
-  // 2. 绘制矩形框
-  if (draw) {
-    draw.disable()
-    draw.clear()
-  }
-
-  draw = new DrawRect(scene, {})
-  draw.enable()
-  draw.on(DrawEvent.Change, (allFeatures) => {
-    // 保存最后绘制的图形
-    const activeFeature = allFeatures[allFeatures.length - 1]
-    // 只保留最后绘制的图形
-    allFeatures.forEach((item, index) => {
-      if (index !== allFeatures.length - 1) {
-        draw.removeFeature(item)
-      }
-    })
-    if (eventsData.length && activeFeature) {
-      const {
-        geometry: { coordinates: coordinatesActive },
-      } = activeFeature
-
-      // 使用turf判断哪些事故点落在绘制的拉框中
-      const resData = eventsData.filter((item) => {
-        const { geometry } = item
-        if (geometry.type === 'Point') {
-          // 基于坐标构建point和polygon
-          const pt = point(geometry.coordinates)
-          const poly = polygon(coordinatesActive)
-          // 判断点是否在多边形内
-          const isInArea = booleanPointInPolygon(pt, poly)
-          return isInArea
-        }
-      })
-      console.log(resData)
-      dataSource.value = resData
-      if (dataSource.value.length) {
-        isShow.value = true
-      }
-    }
-  })
-}
-const handleClose = () => {
-  isShow.value = false
-  if (draw) {
-    draw.disable()
-    draw.clear()
-    draw = null
-  }
-  // 恢复城市视角
-  map.flyTo({
-    center: [114.3, 30.5],
-    zoom: 12,
-    pitch: 30,
-  })
-}
 watch(
   sceneMap,
   (val) => {
     if (!val) return
-
     map = val.map
     scene = val.scene
   },
-  {
-    immediate: true,
-  },
+  { immediate: true },
 )
-onMounted(async () => {
-  const res = await getEvents()
-  eventsData = res.features
-})
+
+// 切换框选：再次点击则结束并清除
+const toggleDraw = () => {
+  if (!map || !scene) return
+
+  if (isDrawing.value) {
+    handleClose()
+    return
+  }
+
+  // 1. 切回城市视角
+  map.flyTo({ center: [114.3, 30.5], zoom: 12, pitch: 30 })
+  // 2. 清空上一次结果
+  dataSource.value = []
+  isShow.value = false
+  isDrawing.value = true
+
+  // 3. 开始框选：绘制完成后由 useBoxQuery 调用后端并高亮结果
+  startBoxQuery(scene, {
+    layer: 'events',
+    onResult: (features) => {
+      dataSource.value = features
+      if (features.length) isShow.value = true
+    },
+  })
+}
+
+const handleClose = () => {
+  isShow.value = false
+  dataSource.value = []
+  isDrawing.value = false
+  stopBoxQuery(scene)
+  // 恢复城市视角
+  map?.flyTo({ center: [114.3, 30.5], zoom: 12, pitch: 30 })
+}
+
+onBeforeUnmount(() => stopBoxQuery(scene))
 </script>

@@ -98,5 +98,20 @@ class Wuhan_BuildingsQuerySchema(Schema):
         ordered = True  
     Elevation = fields.Int()
 
+class SpatialBboxQuerySchema(Schema):
+    """bbox 空间查询参数：矩形范围 + 图层名 + 返回条数上限"""
+    class Meta:
+        unknown = EXCLUDE
+        ordered = True
+    minx = fields.Float(required=True, validate=validate.Range(min=-180, max=180))
+    miny = fields.Float(required=True, validate=validate.Range(min=-90, max=90))
+    maxx = fields.Float(required=True, validate=validate.Range(min=-180, max=180))
+    maxy = fields.Float(required=True, validate=validate.Range(min=-90, max=90))
+    layer = fields.String(
+        load_default='events',
+        validate=validate.OneOf(['events', 'roads', 'buildings']),
+    )
+    limit = fields.Int(load_default=1000, validate=validate.Range(min=1, max=5000))
+
 
 
